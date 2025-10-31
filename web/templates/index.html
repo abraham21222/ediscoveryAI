@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Discovery Search Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        h1 {
+            color: #667eea;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .stat-value {
+            font-size: 36px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .search-box {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .search-input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        input[type="text"], input[type="date"] {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e1e8ed;
+            border-radius: 12px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        input[type="text"]:focus, input[type="date"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .filters {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .results {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e1e8ed;
+        }
+
+        .results-count {
+            font-size: 18px;
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .document-card {
+            border: 2px solid #e1e8ed;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .document-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .document-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+
+        .document-subject {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .document-meta {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 3px;
+        }
+
+        .document-preview {
+            font-size: 14px;
+            color: #555;
+            line-height: 1.6;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #e1e8ed;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            background: #667eea;
+            color: white;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 60px;
+            color: #999;
+        }
+
+        .no-results-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .modal-content {
+            background: white;
+            max-width: 800px;
+            margin: 40px auto;
+            border-radius: 16px;
+            padding: 30px;
+            position: relative;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 30px;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .modal-close:hover {
+            color: #333;
+        }
+
+        .document-full {
+            margin-top: 20px;
+        }
+
+        .document-body {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            line-height: 1.6;
+            font-family: monospace;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .custody-chain {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #e1e8ed;
+        }
+
+        .custody-event {
+            padding: 10px;
+            border-left: 3px solid #667eea;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 E-Discovery Search Platform</h1>
+            <p class="subtitle">Powered by PostgreSQL Full-Text Search & AWS S3</p>
+            
+            <div class="stats" id="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-documents">-</div>
+                    <div class="stat-label">Documents</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-custodians">-</div>
+                    <div class="stat-label">Custodians</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-sources">-</div>
+                    <div class="stat-label">Sources</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="search-box">
+            <div class="search-input-group">
+                <input type="text" id="searchQuery" placeholder="Search documents... (e.g., 'quarterly report', 'contract')" />
+            </div>
+            
+            <div class="filters">
+                <input type="text" id="searchCustodian" placeholder="Filter by custodian email..." />
+                <input type="date" id="searchDateFrom" placeholder="From date" />
+                <input type="date" id="searchDateTo" placeholder="To date" />
+            </div>
+            
+            <button onclick="performSearch()" id="searchButton">
+                🔍 Search Documents
+            </button>
+        </div>
+
+        <div class="results">
+            <div class="results-header">
+                <div class="results-count" id="resultsCount">Enter a search query to begin</div>
+            </div>
+            <div id="resultsContainer">
+                <div class="no-results">
+                    <div class="no-results-icon">📄</div>
+                    <p>No search performed yet</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Document Details Modal -->
+    <div class="modal" id="documentModal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <div id="modalContent"></div>
+        </div>
+    </div>
+
+    <script>
+        // Load statistics on page load
+        window.addEventListener('DOMContentLoaded', loadStats);
+
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('stat-documents').textContent = data.stats.total_documents.toLocaleString();
+                    document.getElementById('stat-custodians').textContent = data.stats.total_custodians.toLocaleString();
+                    document.getElementById('stat-sources').textContent = data.stats.by_source.length;
+                }
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        }
+
+        async function performSearch() {
+            const query = document.getElementById('searchQuery').value.trim();
+            const custodian = document.getElementById('searchCustodian').value.trim();
+            const dateFrom = document.getElementById('searchDateFrom').value;
+            const dateTo = document.getElementById('searchDateTo').value();
+            
+            const searchButton = document.getElementById('searchButton');
+            const resultsContainer = document.getElementById('resultsContainer');
+            const resultsCount = document.getElementById('resultsCount');
+            
+            // Show loading
+            searchButton.disabled = true;
+            searchButton.textContent = '⏳ Searching...';
+            resultsContainer.innerHTML = '<div class="loading">Searching documents...</div>';
+            
+            try {
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        query,
+                        custodian,
+                        date_from: dateFrom,
+                        date_to: dateTo,
+                        limit: 100
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayResults(data.documents);
+                    resultsCount.textContent = `Found ${data.count} document(s)`;
+                } else {
+                    resultsContainer.innerHTML = `<div class="no-results"><div class="no-results-icon">❌</div><p>Error: ${data.error}</p></div>`;
+                    resultsCount.textContent = 'Search failed';
+                }
+            } catch (error) {
+                resultsContainer.innerHTML = `<div class="no-results"><div class="no-results-icon">❌</div><p>Error: ${error.message}</p></div>`;
+                resultsCount.textContent = 'Search failed';
+            } finally {
+                searchButton.disabled = false;
+                searchButton.textContent = '🔍 Search Documents';
+            }
+        }
+
+        function displayResults(documents) {
+            const resultsContainer = document.getElementById('resultsContainer');
+            
+            if (documents.length === 0) {
+                resultsContainer.innerHTML = `
+                    <div class="no-results">
+                        <div class="no-results-icon">🔍</div>
+                        <p>No documents found matching your search</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            resultsContainer.innerHTML = documents.map((doc, index) => `
+                <div class="document-card" onclick="viewDocument('${doc.document_id}')">
+                    <div class="document-header">
+                        <div>
+                            <div class="document-subject">${escapeHtml(doc.subject || 'No Subject')}</div>
+                            <div class="document-meta">
+                                <strong>From:</strong> ${escapeHtml(doc.custodian_email || 'Unknown')}
+                            </div>
+                            <div class="document-meta">
+                                <strong>Date:</strong> ${formatDate(doc.collected_at)}
+                            </div>
+                        </div>
+                        <div>
+                            <span class="badge">${escapeHtml(doc.source)}</span>
+                            ${doc.relevance ? `<br><small style="color: #999;">Relevance: ${doc.relevance.toFixed(3)}</small>` : ''}
+                        </div>
+                    </div>
+                    ${doc.body_text ? `
+                        <div class="document-preview">
+                            ${escapeHtml(doc.body_text.substring(0, 200))}${doc.body_text.length > 200 ? '...' : ''}
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        async function viewDocument(documentId) {
+            const modal = document.getElementById('documentModal');
+            const modalContent = document.getElementById('modalContent');
+            
+            modalContent.innerHTML = '<div class="loading">Loading document...</div>';
+            modal.style.display = 'block';
+            
+            try {
+                const response = await fetch(`/api/document/${documentId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const doc = data.document;
+                    modalContent.innerHTML = `
+                        <h2>${escapeHtml(doc.subject || 'No Subject')}</h2>
+                        <div class="document-meta" style="margin-top: 10px;">
+                            <strong>Document ID:</strong> ${escapeHtml(doc.document_id)}<br>
+                            <strong>From:</strong> ${escapeHtml(doc.custodian_email || 'Unknown')}<br>
+                            <strong>Date:</strong> ${formatDate(doc.collected_at)}<br>
+                            <strong>Source:</strong> ${escapeHtml(doc.source)}
+                        </div>
+                        <div class="document-full">
+                            <h3>Document Body</h3>
+                            <div class="document-body">${escapeHtml(doc.body_text || 'No body text')}</div>
+                        </div>
+                        ${doc.chain_of_custody && doc.chain_of_custody.length > 0 ? `
+                            <div class="custody-chain">
+                                <h3>Chain of Custody</h3>
+                                ${doc.chain_of_custody.map(event => `
+                                    <div class="custody-event">
+                                        <strong>${escapeHtml(event.action)}</strong> by ${escapeHtml(event.actor)}<br>
+                                        <small>${formatDate(event.event_timestamp)}</small>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                    `;
+                } else {
+                    modalContent.innerHTML = `<p>Error loading document: ${data.error}</p>`;
+                }
+            } catch (error) {
+                modalContent.innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('documentModal').style.display = 'none';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString();
+        }
+
+        // Allow Enter key to search
+        document.getElementById('searchQuery').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+
+        // Close modal when clicking outside
+        window.addEventListener('click', function(e) {
+            const modal = document.getElementById('documentModal');
+            if (e.target === modal) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>
+

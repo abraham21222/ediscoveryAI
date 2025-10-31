@@ -1,0 +1,52 @@
+{
+  "connectors": [
+    {
+      "type": "microsoft_graph",
+      "name": "m365_executive_mailbox",
+      "enabled": true,
+      "params": {
+        "tenant_id": "${AZURE_TENANT_ID}",
+        "client_id": "${AZURE_CLIENT_ID}",
+        "client_secret": "${AZURE_CLIENT_SECRET}",
+        "mailbox": "user@yourdomain.com",
+        "batch_size": 100,
+        "max_messages": null,
+        "include_attachments": true,
+        "folders": ["Inbox", "Sent Items"],
+        "start_date": null,
+        "use_delta": false
+      }
+    }
+  ],
+  "object_store": {
+    "type": "s3",
+    "params": {
+      "bucket": "ediscovery-evidence-prod",
+      "prefix": "microsoft-graph/",
+      "region": "us-east-1",
+      "encryption": "AES256",
+      "storage_class": "INTELLIGENT_TIERING",
+      "enable_versioning": true,
+      "enable_object_lock": true
+    }
+  },
+  "metadata_store": {
+    "type": "sqlite",
+    "params": {
+      "path": "./_metadata/metadata.db"
+    }
+  },
+  "processing": {
+    "enable_deduplication": true,
+    "enable_ocr": true,
+    "enable_entity_extraction": true,
+    "enable_privilege_detection": false
+  },
+  "security": {
+    "envelope_encryption": true,
+    "key_management_service": "aws-kms",
+    "rbac_policy": null,
+    "audit_log_destination": "s3://ediscovery-audit-logs/microsoft-graph/"
+  }
+}
+

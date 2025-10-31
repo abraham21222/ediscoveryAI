@@ -1,0 +1,5 @@
+#!/bin/bash
+# Simple wrapper for the search tool
+cd "$(dirname "$0")"
+python3 scripts/search.py "$@"
+

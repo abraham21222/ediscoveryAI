@@ -1,0 +1,39 @@
+{
+  "connectors": [
+    {
+      "type": "mock_email",
+      "name": "sample_seed_data",
+      "enabled": true,
+      "params": {
+        "batch_size": 10
+      }
+    }
+  ],
+  "object_store": {
+    "type": "s3",
+    "params": {
+      "tenant_id": "test-tenant",
+      "bucket_prefix": "ediscovery-local",
+      "region": "us-east-1",
+      "endpoint_url": "http://localhost:4566",
+      "storage_class": "STANDARD",
+      "enable_versioning": true
+    }
+  },
+  "metadata_store": {
+    "type": "sqlite",
+    "params": {
+      "path": "./_metadata/metadata.db"
+    }
+  },
+  "processing": {
+    "enable_deduplication": true,
+    "enable_ocr": false,
+    "enable_entity_extraction": false,
+    "enable_privilege_detection": false
+  },
+  "security": {
+    "envelope_encryption": false
+  }
+}
+

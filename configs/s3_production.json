@@ -1,0 +1,52 @@
+{
+  "connectors": [
+    {
+      "type": "microsoft_graph",
+      "name": "tenant_acme_m365",
+      "enabled": false,
+      "params": {
+        "tenant_id": "00000000-0000-0000-0000-000000000000",
+        "client_id": "11111111-1111-1111-1111-111111111111",
+        "client_secret": "aws-secrets-manager://m365/acme/client_secret",
+        "mailbox": "ediscovery@acmelegal.com",
+        "batch_size": 500
+      }
+    },
+    {
+      "type": "mock_email",
+      "name": "sample_seed_data",
+      "enabled": true,
+      "params": {
+        "batch_size": 25
+      }
+    }
+  ],
+  "object_store": {
+    "type": "s3",
+    "params": {
+      "tenant_id": "abraham-test",
+      "bucket_prefix": "ediscovery-prod",
+      "region": "us-east-1",
+      "storage_class": "STANDARD",
+      "enable_versioning": true
+    }
+  },
+  "metadata_store": {
+    "type": "sqlite",
+    "params": {
+      "path": "./_metadata/metadata.db"
+    }
+  },
+  "processing": {
+    "enable_deduplication": true,
+    "enable_ocr": true,
+    "enable_entity_extraction": true,
+    "enable_privilege_detection": false
+  },
+  "security": {
+    "envelope_encryption": false,
+    "rbac_policy": "iam-role://ingestion-pipeline",
+    "audit_log_destination": "kinesis-firehose://ingestion-audit"
+  }
+}
+

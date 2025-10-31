@@ -1,0 +1,44 @@
+{
+  "connectors": [
+    {
+      "type": "mock_email",
+      "name": "sample_seed_data",
+      "enabled": true,
+      "params": {
+        "batch_size": 25
+      }
+    }
+  ],
+  "object_store": {
+    "type": "s3",
+    "params": {
+      "tenant_id": "abraham-test",
+      "bucket_prefix": "ediscovery-prod",
+      "region": "us-east-1",
+      "storage_class": "STANDARD",
+      "enable_versioning": true
+    }
+  },
+  "metadata_store": {
+    "type": "postgres",
+    "params": {
+      "host": "ediscovery-metadata-db.cm526e4m45t7.us-east-1.rds.amazonaws.com",
+      "port": 5432,
+      "database": "ediscovery_metadata",
+      "user": "ediscovery",
+      "password": "BfXUdqKbo7pTAuks",
+      "min_connections": 2,
+      "max_connections": 10
+    }
+  },
+  "processing": {
+    "enable_deduplication": true,
+    "enable_ocr": false,
+    "enable_entity_extraction": false,
+    "enable_privilege_detection": false
+  },
+  "security": {
+    "envelope_encryption": false
+  }
+}
+

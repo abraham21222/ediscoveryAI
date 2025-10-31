@@ -76,3 +76,7 @@ htmlcov/
 
 # OS
 Thumbs.db
+
+# Data and objects (evidence files)
+_objects/
+data/

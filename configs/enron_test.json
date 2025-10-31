@@ -1,0 +1,46 @@
+{
+  "tenant_id": "enron-test",
+  "matter_id": "enron-investigation",
+  
+  "connectors": [
+    {
+      "type": "enron",
+      "name": "enron-emails",
+      "enabled": true,
+      "params": {
+        "data_path": "data/enron/sample"
+      }
+    }
+  ],
+  
+  "object_store": {
+    "type": "local_fs",
+    "params": {
+      "base_path": "_objects"
+    }
+  },
+  
+  "metadata_store": {
+    "type": "postgres",
+    "params": {
+      "host": "localhost",
+      "port": 5432,
+      "database": "ediscovery_metadata",
+      "user": "abrahambloom",
+      "password": "",
+      "min_connections": 2,
+      "max_connections": 10
+    }
+  },
+  
+  "processing": {
+    "enable_deduplication": true,
+    "enable_ocr": false,
+    "enable_entity_extraction": false,
+    "enable_privilege_detection": false
+  },
+  
+  "security": {
+    "envelope_encryption": false
+  }
+}

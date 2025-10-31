@@ -10,6 +10,7 @@ from .cloud_storage import CloudStorageConnector
 from .google_workspace import GoogleWorkspaceConnector
 from .microsoft_graph import MicrosoftGraphConnector
 from .mock_email import MockEmailConnector
+from .enron import EnronConnector
 
 
 def build_default_factory() -> ConnectorFactory:
@@ -18,5 +19,6 @@ def build_default_factory() -> ConnectorFactory:
         "microsoft_graph": MicrosoftGraphConnector,
         "google_workspace": GoogleWorkspaceConnector,
         "cloud_storage": CloudStorageConnector,
+        "enron": EnronConnector,
     }
     return ConnectorFactory(registry)

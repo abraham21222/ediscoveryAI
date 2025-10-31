@@ -70,13 +70,15 @@ def api_search():
     custodian = data.get('custodian', '').strip()
     date_from = data.get('date_from', '').strip()
     date_to = data.get('date_to', '').strip()
+    classification = data.get('classification', '').strip()
+    min_relevance = data.get('min_relevance', '')
     limit = int(data.get('limit', 50))
     
     try:
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        # Build query
+        # Build query with AI analysis
         sql_parts = ["""
             SELECT 
                 d.document_id,
@@ -87,10 +89,54 @@ def api_search():
                 d.indexed_at,
                 c.identifier as custodian_id,
                 c.email as custodian_email,
-                c.display_name as custodian_name
+                c.display_name as custodian_name,
+                a.summary as ai_summary,
+                a.relevance_score as ai_relevance,
+                a.classification as ai_classification,
+                a.privilege_risk as ai_privilege_risk,
+                a.topics as ai_topics,
+                a.analyzed_at as ai_analyzed_at
         """]
         
+        # Use semantic search if query provided and embeddings exist
+        use_semantic = False
+        query_embedding = None
+        
         if query:
+            # Check if embeddings are available
+            cursor.execute("SELECT COUNT(*) as count FROM documents WHERE embedding IS NOT NULL")
+            embeddings_count = cursor.fetchone()['count']
+            
+            if embeddings_count > 0:
+                use_semantic = True
+                # Generate embedding for search query
+                try:
+                    from openai import OpenAI
+                    import os
+                    
+                    api_key = os.getenv('OPENAI_API_KEY') or os.getenv('OPENROUTER_API_KEY')
+                    if api_key:
+                        if api_key.startswith('sk-or-'):
+                            client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
+                        else:
+                            client = OpenAI(api_key=api_key)
+                        
+                        response = client.embeddings.create(
+                            input=query,
+                            model="text-embedding-3-small"
+                        )
+                        query_embedding = response.data[0].embedding
+                except Exception as e:
+                    print(f"Warning: Failed to generate query embedding: {e}")
+                    use_semantic = False
+        
+        if use_semantic and query_embedding:
+            # Semantic search using vector similarity
+            sql_parts[0] += """,
+                (1 - (d.embedding <=> %s::vector)) as relevance
+            """
+        elif query:
+            # Fall back to keyword search
             sql_parts[0] += """,
                 ts_rank(d.search_vector, plainto_tsquery('english', %s)) as relevance
             """
@@ -98,12 +144,17 @@ def api_search():
         sql_parts.append("""
             FROM documents d
             LEFT JOIN custodians c ON d.custodian_id = c.id
+            LEFT JOIN ai_analysis a ON d.document_id = a.document_id
             WHERE 1=1
         """)
         
         params = []
         
-        if query:
+        if use_semantic and query_embedding:
+            # Use vector similarity
+            params.append(query_embedding)
+        elif query:
+            # Use keyword search
             sql_parts.append("AND d.search_vector @@ plainto_tsquery('english', %s)")
             params.append(query)
             params.append(query)
@@ -120,10 +171,20 @@ def api_search():
             sql_parts.append("AND d.collected_at <= %s")
             params.append(date_to)
         
+        # AI filters
+        if classification:
+            sql_parts.append("AND a.classification = %s")
+            params.append(classification)
+        
+        if min_relevance:
+            sql_parts.append("AND a.relevance_score >= %s")
+            params.append(int(min_relevance))
+        
+        # Ordering - prioritize AI relevance if available
         if query:
-            sql_parts.append("ORDER BY relevance DESC, d.collected_at DESC")
+            sql_parts.append("ORDER BY relevance DESC, COALESCE(a.relevance_score, 0) DESC, d.collected_at DESC")
         else:
-            sql_parts.append("ORDER BY d.collected_at DESC")
+            sql_parts.append("ORDER BY COALESCE(a.relevance_score, 0) DESC, d.collected_at DESC")
         
         sql_parts.append(f"LIMIT {limit}")
         
@@ -151,9 +212,15 @@ def api_search():
         })
     
     except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"=== Search API Error ===")
+        print(error_detail)
+        print(f"========================")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': str(e),
+            'detail': error_detail[:500]  # Truncate for response
         }), 500
 
 
@@ -211,6 +278,68 @@ def api_stats():
         }), 500
 
 
+@app.route('/api/ai-stats', methods=['GET'])
+def api_ai_stats():
+    """API endpoint for AI analysis statistics."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        stats = {}
+        
+        # Total documents and analyzed
+        cursor.execute("""
+            SELECT 
+                COUNT(d.id) as total_docs,
+                COUNT(a.id) as analyzed_docs
+            FROM documents d
+            LEFT JOIN ai_analysis a ON d.document_id = a.document_id
+        """)
+        counts = cursor.fetchone()
+        stats["total_documents"] = counts["total_docs"]
+        stats["analyzed_documents"] = counts["analyzed_docs"]
+        stats["pending_documents"] = counts["total_docs"] - counts["analyzed_docs"]
+        
+        # By classification
+        cursor.execute("""
+            SELECT classification, COUNT(*) as count
+            FROM ai_analysis
+            GROUP BY classification
+            ORDER BY count DESC
+        """)
+        stats["by_classification"] = [dict(row) for row in cursor.fetchall()]
+        
+        # High priority docs
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM ai_analysis
+            WHERE relevance_score >= 70
+        """)
+        stats["high_priority_count"] = cursor.fetchone()["count"]
+        
+        # Privilege risk
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM ai_analysis
+            WHERE privilege_risk >= 50
+        """)
+        stats["privilege_risk_count"] = cursor.fetchone()["count"]
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/document/<document_id>', methods=['GET'])
 def api_document(document_id):
     """API endpoint to get full document details."""
@@ -223,9 +352,19 @@ def api_document(document_id):
                 d.*,
                 c.identifier as custodian_id,
                 c.email as custodian_email,
-                c.display_name as custodian_name
+                c.display_name as custodian_name,
+                a.summary as ai_summary,
+                a.entities as ai_entities,
+                a.relevance_score as ai_relevance,
+                a.classification as ai_classification,
+                a.privilege_risk as ai_privilege_risk,
+                a.topics as ai_topics,
+                a.action_items as ai_action_items,
+                a.review_notes as ai_review_notes,
+                a.analyzed_at as ai_analyzed_at
             FROM documents d
             LEFT JOIN custodians c ON d.custodian_id = c.id
+            LEFT JOIN ai_analysis a ON d.document_id = a.document_id
             WHERE d.document_id = %s
         """, (document_id,))
         

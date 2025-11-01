@@ -1,0 +1,9 @@
+DocID,AI_Responsive,AI_Responsive_Confidence,AI_Privileged,AI_Privilege_Confidence,AI_Privilege_Type,AI_Classification,AI_Topics,Hot_Score,AI_Sentiment,AI_Entities,Redaction_Suggestions,Similar_Document_IDs
+ENRON_000001,Maybe,0.65,No,0.98,,Needs Review,General,50,,,,
+ENRON_000002,Maybe,0.65,No,0.98,,Needs Review,General,50,,,,
+ENRON_000003,Maybe,0.65,No,0.98,,Needs Review,General,50,,,,
+ENRON_000004,Maybe,0.65,No,0.98,,Needs Review,General,50,,,,
+ENRON_000005,Maybe,0.65,No,0.98,,Needs Review,General,50,,,,
+ENRON_000006,Maybe,0.65,No,0.98,,Needs Review,General,50,,,,
+ENRON_000007,Maybe,0.65,No,0.98,,Needs Review,General,50,,,,
+ENRON_000008,Maybe,0.65,No,0.98,,Needs Review,General,50,,,,

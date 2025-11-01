@@ -1,0 +1,6 @@
+DocID,AI_Responsive,AI_Responsive_Confidence,AI_Privileged,AI_Privilege_Confidence,AI_Privilege_Type,AI_Classification,AI_Topics,Hot_Score,AI_Sentiment,AI_Entities,Redaction_Suggestions,Similar_Document_IDs
+EMAIL001,Yes,0.89,No,0.98,,Relevant,Financial Results,65,,,,
+EMAIL002,Yes,0.89,No,0.98,,Relevant,Budget Planning,65,,,,
+EMAIL003,Maybe,0.65,Yes,0.95,,Privileged,Legal Communication,25,,,,
+DOC0001,Yes,0.89,No,0.98,,Relevant,Contract Negotiation,65,,,,
+EMAIL004,No,0.99,No,0.98,,Routine,Social,5,,,,

@@ -12,7 +12,6 @@ Then open: http://localhost:5000
 
 import os
 import sys
-import json
 from datetime import datetime
 from pathlib import Path
 
@@ -25,43 +24,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'dev-secret-key-change-in-production'
-app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
-app.config['UPLOAD_FOLDER'] = 'uploads'
-
-
-_redactions_table_initialized = False
-
-
-def ensure_redactions_table(force: bool = False):
-    """Ensure the document_redactions table exists before use."""
-    global _redactions_table_initialized
-
-    if _redactions_table_initialized and not force:
-        return
-
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS document_redactions (
-                document_id TEXT PRIMARY KEY,
-                redacted_subject TEXT,
-                redacted_body TEXT,
-                redaction_summary TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        conn.commit()
-        cursor.close()
-        _redactions_table_initialized = True
-    except Exception as e:
-        print(f"Error ensuring document_redactions table: {e}", file=sys.stderr)
-    finally:
-        if conn:
-            conn.close()
 
 
 def load_env():
@@ -418,7 +380,6 @@ def api_ai_stats():
 def api_document(document_id):
     """API endpoint to get full document details."""
     try:
-        ensure_redactions_table()
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
@@ -436,15 +397,10 @@ def api_document(document_id):
                 a.topics as ai_topics,
                 a.action_items as ai_action_items,
                 a.review_notes as ai_review_notes,
-                a.analyzed_at as ai_analyzed_at,
-                r.redacted_subject as redacted_subject,
-                r.redacted_body as redacted_body,
-                r.redaction_summary as redaction_summary,
-                r.created_at as redaction_created_at
+                a.analyzed_at as ai_analyzed_at
             FROM documents d
             LEFT JOIN custodians c ON d.custodian_id = c.id
             LEFT JOIN ai_analysis a ON d.document_id = a.document_id
-            LEFT JOIN document_redactions r ON d.document_id = r.document_id
             WHERE d.document_id = %s
         """, (document_id,))
         
@@ -461,8 +417,6 @@ def api_document(document_id):
             doc['collected_at'] = doc['collected_at'].isoformat()
         if isinstance(doc.get('indexed_at'), datetime):
             doc['indexed_at'] = doc['indexed_at'].isoformat()
-        if isinstance(doc.get('redaction_created_at'), datetime):
-            doc['redaction_created_at'] = doc['redaction_created_at'].isoformat()
         
         # Get chain of custody
         cursor.execute("""
@@ -643,139 +597,6 @@ def api_all_tags():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/documents/delete', methods=['POST'])
-def api_delete_documents():
-    """Delete selected documents and all related records."""
-    try:
-        data = request.get_json()
-        document_ids = data.get('document_ids', [])
-        
-        if not document_ids:
-            return jsonify({'success': False, 'error': 'No document IDs provided'}), 400
-        
-        ensure_redactions_table()
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Delete from all related tables (cascading delete)
-        deleted_count = 0
-        
-        for doc_id in document_ids:
-            # Delete from user_tags
-            cursor.execute("DELETE FROM user_tags WHERE document_id = %s", (doc_id,))
-            
-            # Delete from user_review
-            cursor.execute("DELETE FROM user_review WHERE document_id = %s", (doc_id,))
-            
-            # Delete from ai_analysis
-            cursor.execute("DELETE FROM ai_analysis WHERE document_id = %s", (doc_id,))
-            
-            # Delete from custody_events
-            cursor.execute("DELETE FROM custody_events WHERE document_id = %s", (doc_id,))
-            
-            # Delete from document_matters
-            cursor.execute("DELETE FROM document_matters WHERE document_id = %s", (doc_id,))
-            
-            # Delete from attachments
-            cursor.execute("DELETE FROM attachments WHERE parent_document_id = %s", (doc_id,))
-            
-            # Delete from redactions table
-            cursor.execute("DELETE FROM document_redactions WHERE document_id = %s", (doc_id,))
-            
-            # Finally, delete the document itself
-            cursor.execute("DELETE FROM documents WHERE document_id = %s", (doc_id,))
-            if cursor.rowcount > 0:
-                deleted_count += 1
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        return jsonify({
-            'success': True,
-            'deleted_count': deleted_count,
-            'message': f'Successfully deleted {deleted_count} document(s)'
-        })
-    
-    except Exception as e:
-        print(f"Error deleting documents: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/documents/delete-all', methods=['POST'])
-def api_delete_all_documents():
-    """Delete ALL documents and all related records. USE WITH EXTREME CAUTION!"""
-    try:
-        ensure_redactions_table()
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Get count before deletion
-        cursor.execute("SELECT COUNT(*) FROM documents")
-        doc_count = cursor.fetchone()[0]
-        
-        # Delete all related records first
-        cursor.execute("DELETE FROM user_tags")
-        tags_deleted = cursor.rowcount
-        
-        cursor.execute("DELETE FROM user_review")
-        review_deleted = cursor.rowcount
-        
-        cursor.execute("DELETE FROM ai_analysis")
-        ai_deleted = cursor.rowcount
-        
-        cursor.execute("DELETE FROM custody_events")
-        custody_deleted = cursor.rowcount
-        
-        cursor.execute("DELETE FROM document_matters")
-        matters_deleted = cursor.rowcount
-        
-        cursor.execute("DELETE FROM attachments")
-        attachments_deleted = cursor.rowcount
-        
-        cursor.execute("DELETE FROM document_redactions")
-        redactions_deleted = cursor.rowcount
-        
-        # Delete all documents
-        cursor.execute("DELETE FROM documents")
-        documents_deleted = cursor.rowcount
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        total_related = (
-            tags_deleted + review_deleted + ai_deleted +
-            custody_deleted + matters_deleted + attachments_deleted +
-            redactions_deleted
-        )
-        
-        return jsonify({
-            'success': True,
-            'deleted_count': documents_deleted,
-            'related_records_deleted': total_related,
-            'breakdown': {
-                'documents': documents_deleted,
-                'tags': tags_deleted,
-                'reviews': review_deleted,
-                'ai_analysis': ai_deleted,
-                'custody_events': custody_deleted,
-                'document_matters': matters_deleted,
-                'attachments': attachments_deleted,
-                'redactions': redactions_deleted
-            },
-            'message': f'Successfully deleted ALL {documents_deleted} document(s) and {total_related} related records'
-        })
-    
-    except Exception as e:
-        print(f"Error deleting all documents: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
 # Global progress tracker for custom AI analysis
 custom_ai_progress = {}
 
@@ -879,61 +700,41 @@ def api_custom_ai_progress(job_id):
 
 
 def process_custom_ai_analysis(job_id, document_ids, custom_prompt, create_tags=True, redaction_mode=False, redaction_prompt=''):
-    """
-    Process documents with custom AI prompt using PARALLEL PROCESSING with Grok 4 Fast.
-    Up to 17x faster than sequential processing!
-    """
+    """Process documents with custom AI prompt using PARALLEL PROCESSING with Grok 4 Fast."""
     import os
     import sys
-    import re
     from openai import OpenAI
     from concurrent.futures import ThreadPoolExecutor, as_completed
     import threading
-    import psycopg2
-    import psycopg2.extras
     
-    print(f"\n{'='*60}", file=sys.stderr)
-    print(f"🚀 PARALLEL AI ANALYSIS JOB {job_id}", file=sys.stderr)
-    print(f"{'='*60}", file=sys.stderr)
-    print(f"📄 Documents: {len(document_ids)}", file=sys.stderr)
-    print(f"⚡ Model: x-ai/grok-4-fast (ULTRA-FAST MODE)", file=sys.stderr)
-    print(f"🔀 Parallel Workers: {min(10, len(document_ids))}", file=sys.stderr)
-    print(f"{'='*60}\n", file=sys.stderr)
+    print(f"=== Starting PARALLEL custom AI analysis job {job_id} ===", file=sys.stderr)
+    print(f"Documents to process: {len(document_ids)} documents", file=sys.stderr)
+    print(f"Model: x-ai/grok-4-fast (FAST MODE)", file=sys.stderr)
+    print(f"Custom prompt: {custom_prompt[:100]}...", file=sys.stderr)
     sys.stderr.flush()
     
     try:
-        # Initialize OpenAI client (shared across threads - thread-safe)
+        # Initialize OpenAI client
         api_key = os.environ.get('OPENROUTER_API_KEY')
         if not api_key:
-            print("❌ Error: OPENROUTER_API_KEY not set", file=sys.stderr)
+            print("Error: OPENROUTER_API_KEY not set", file=sys.stderr)
             custom_ai_progress[job_id]['completed'] = True
             return
+        
+        print(f"API key found: {api_key[:20]}...", file=sys.stderr)
         
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key
         )
         
-        # Thread-safe lock for progress updates
-        progress_lock = threading.Lock()
+        # Thread-safe lock for database writes and progress updates
+        db_lock = threading.Lock()
         
         def analyze_single_document(doc_id):
-            """Analyze a single document - called in parallel for each document."""
-            conn = None
             try:
-                # Each thread gets its own database connection (thread-safe)
-                conn = psycopg2.connect(
-                    host=os.environ.get("POSTGRES_HOST", os.environ.get("DB_HOST", "localhost")),
-                    port=int(os.environ.get("POSTGRES_PORT", os.environ.get("DB_PORT", "5432"))),
-                    database=os.environ.get("POSTGRES_DATABASE", os.environ.get("DB_NAME", "ediscovery_metadata")),
-                    user=os.environ.get("POSTGRES_USER", os.environ.get("DB_USER", "abrahambloom")),
-                    password=os.environ.get("POSTGRES_PASSWORD", os.environ.get("DB_PASSWORD", ""))
-                )
-                cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-                
-                # Update progress (thread-safe)
-                with progress_lock:
-                    custom_ai_progress[job_id]['current_document'] = doc_id
+                # Update progress with current document
+                custom_ai_progress[job_id]['current_document'] = doc_id
                 
                 # Get document content
                 cursor.execute("""
@@ -944,15 +745,10 @@ def process_custom_ai_analysis(job_id, document_ids, custom_prompt, create_tags=
                 
                 doc = cursor.fetchone()
                 if not doc:
-                    print(f"⚠️  Document {doc_id} not found", file=sys.stderr)
-                    return None
+                    continue
                 
-                # Update progress with subject (thread-safe)
-                with progress_lock:
-                    custom_ai_progress[job_id]['current_subject'] = doc['subject']
-                
-                print(f"🔍 Analyzing: {doc['subject'][:60]}...", file=sys.stderr)
-                sys.stderr.flush()
+                # Update progress with subject
+                custom_ai_progress[job_id]['current_subject'] = doc['subject']
                 
                 # Prepare content for AI
                 content = f"Subject: {doc['subject']}\n\nBody:\n{doc['body_text'] or 'No content'}"
@@ -968,10 +764,16 @@ KEY FINDINGS: [bullet points of key findings]
 ANALYSIS: [your detailed analysis]"""
                 
                 response = client.chat.completions.create(
-                    model="x-ai/grok-4-fast",  # GROK 4 FAST - ULTRA-SPEED!
+                    model="x-ai/grok-4-fast",  # UPGRADED TO GROK 4 FAST!
                     messages=[
-                        {"role": "system", "content": structured_prompt},
-                        {"role": "user", "content": content}
+                        {
+                            "role": "system",
+                            "content": structured_prompt
+                        },
+                        {
+                            "role": "user",
+                            "content": content
+                        }
                     ],
                     max_tokens=700,
                     temperature=0.3
@@ -980,6 +782,7 @@ ANALYSIS: [your detailed analysis]"""
                 ai_response = response.choices[0].message.content
                 
                 # Parse the structured response
+                import re
                 relevance_match = re.search(r'RELEVANCE:\s*(\d+)', ai_response, re.IGNORECASE)
                 relevance_score = int(relevance_match.group(1)) if relevance_match else 50
                 
@@ -1001,7 +804,7 @@ ANALYSIS: [your detailed analysis]"""
                 if 'compliance' in ai_response.lower() or 'regulatory' in ai_response.lower():
                     topics.append('Compliance')
                 
-                # Save to ai_analysis table
+                # Save to ai_analysis table (main AI fields)
                 cursor.execute("""
                     INSERT INTO ai_analysis (
                         document_id, ai_summary, ai_relevance, ai_classification,
@@ -1043,6 +846,7 @@ ANALYSIS: [your detailed analysis]"""
                 if create_tags:
                     tags_to_create = []
                     
+                    # Add classification-based tags
                     if classification == 'relevant':
                         tags_to_create.append('AI: Relevant')
                     elif classification == 'not-relevant':
@@ -1050,6 +854,7 @@ ANALYSIS: [your detailed analysis]"""
                     else:
                         tags_to_create.append('AI: Needs Review')
                     
+                    # Add relevance-based tags
                     if relevance_score >= 70:
                         tags_to_create.append('High Priority')
                     elif relevance_score >= 40:
@@ -1057,9 +862,11 @@ ANALYSIS: [your detailed analysis]"""
                     else:
                         tags_to_create.append('Low Priority')
                     
+                    # Add topic-based tags
                     for topic in topics:
                         tags_to_create.append(topic)
                     
+                    # Create the tags in database
                     for tag_name in tags_to_create:
                         try:
                             cursor.execute("""
@@ -1068,9 +875,11 @@ ANALYSIS: [your detailed analysis]"""
                                 ON CONFLICT (document_id, tag_name) DO NOTHING
                             """, (doc_id, tag_name))
                         except Exception as tag_error:
-                            print(f"⚠️  Could not create tag '{tag_name}': {tag_error}", file=sys.stderr)
+                            print(f"Warning: Could not create tag '{tag_name}': {tag_error}", file=sys.stderr)
                     
                     conn.commit()
+                    print(f"Created {len(tags_to_create)} tags for {doc_id}: {tags_to_create}", file=sys.stderr)
+                    sys.stderr.flush()
                 
                 # Perform redaction if requested
                 redacted_subject = None
@@ -1078,8 +887,10 @@ ANALYSIS: [your detailed analysis]"""
                 redaction_details = None
                 
                 if redaction_mode and redaction_prompt:
-                    print(f"🔒 Redacting: {doc_id}...", file=sys.stderr)
+                    print(f"🔒 Performing redaction for {doc_id}...", file=sys.stderr)
+                    sys.stderr.flush()
                     
+                    # Call AI to identify and redact content
                     redaction_system_prompt = f"""{redaction_prompt}
 
 Please identify ALL content that matches the redaction criteria and provide:
@@ -1095,7 +906,7 @@ REDACTED_BODY: [full body text with redactions applied]"""
                     redaction_content = f"SUBJECT: {doc['subject']}\n\nBODY:\n{doc['body_text']}"
                     
                     redaction_response = client.chat.completions.create(
-                        model="x-ai/grok-4-fast",  # ALSO USE GROK FOR REDACTION!
+                        model="openai/gpt-4o-mini",
                         messages=[
                             {"role": "system", "content": redaction_system_prompt},
                             {"role": "user", "content": redaction_content}
@@ -1106,6 +917,7 @@ REDACTED_BODY: [full body text with redactions applied]"""
                     
                     redaction_result = redaction_response.choices[0].message.content
                     
+                    # Parse redaction results
                     summary_match = re.search(r'REDACTION_SUMMARY:\s*(.+?)(?=REDACTED_SUBJECT:|$)', redaction_result, re.IGNORECASE | re.DOTALL)
                     redaction_details = summary_match.group(1).strip() if summary_match else "Redactions applied"
                     
@@ -1115,40 +927,20 @@ REDACTED_BODY: [full body text with redactions applied]"""
                     body_match = re.search(r'REDACTED_BODY:\s*(.+?)$', redaction_result, re.IGNORECASE | re.DOTALL)
                     redacted_body = body_match.group(1).strip() if body_match else doc['body_text']
                     
-                    # Store redacted version (thread-safe)
-                    with progress_lock:
-                        custom_ai_progress[job_id]['redactions'].append({
-                            'document_id': doc_id,
-                            'original_subject': doc['subject'],
-                            'original_body': doc['body_text'],
-                            'redacted_subject': redacted_subject,
-                            'redacted_body': redacted_body,
-                            'redaction_summary': redaction_details
-                        })
+                    # Store redacted version in results
+                    custom_ai_progress[job_id]['redactions'].append({
+                        'document_id': doc_id,
+                        'original_subject': doc['subject'],
+                        'original_body': doc['body_text'],
+                        'redacted_subject': redacted_subject,
+                        'redacted_body': redacted_body,
+                        'redaction_summary': redaction_details
+                    })
                     
-                    # Persist redaction to database for future viewing
-                    try:
-                        ensure_redactions_table()
-                        cursor.execute(
-                            """
-                            INSERT INTO document_redactions (
-                                document_id, redacted_subject, redacted_body, redaction_summary, created_at
-                            ) VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
-                            ON CONFLICT (document_id) DO UPDATE SET
-                                redacted_subject = EXCLUDED.redacted_subject,
-                                redacted_body = EXCLUDED.redacted_body,
-                                redaction_summary = EXCLUDED.redaction_summary,
-                                created_at = CURRENT_TIMESTAMP
-                            """,
-                            (doc_id, redacted_subject, redacted_body, redaction_details)
-                        )
-                        conn.commit()
-                    except Exception as redaction_db_error:
-                        print(f"Error saving redaction for {doc_id}: {redaction_db_error}", file=sys.stderr)
-                        import traceback
-                        traceback.print_exc(file=sys.stderr)
+                    print(f"✅ Redaction complete for {doc_id}: {redaction_details}", file=sys.stderr)
+                    sys.stderr.flush()
                 
-                # Store result for summary (thread-safe)
+                # Store result for summary
                 result_data = {
                     'document_id': doc_id,
                     'subject': doc['subject'],
@@ -1162,59 +954,32 @@ REDACTED_BODY: [full body text with redactions applied]"""
                     result_data['redacted'] = True
                     result_data['redaction_summary'] = redaction_details
                 
-                with progress_lock:
-                    custom_ai_progress[job_id]['results'].append(result_data)
-                    custom_ai_progress[job_id]['processed'] += 1
+                custom_ai_progress[job_id]['results'].append(result_data)
                 
-                print(f"✅ Completed: {doc['subject'][:60]}...", file=sys.stderr)
-                sys.stderr.flush()
-                
-                return result_data
+                # Update progress
+                custom_ai_progress[job_id]['processed'] += 1
                 
             except Exception as e:
-                print(f"❌ Error processing {doc_id}: {e}", file=sys.stderr)
+                print(f"!!! Error processing document {doc_id}: {e}", file=sys.stderr)
                 import traceback
                 traceback.print_exc(file=sys.stderr)
                 sys.stderr.flush()
-                return None
-            finally:
-                if conn:
-                    conn.close()
+                continue
         
-        # Execute all document analyses in parallel!
-        max_workers = min(10, len(document_ids))  # Max 10 parallel threads
-        print(f"🚀 Starting parallel processing with {max_workers} workers...\n", file=sys.stderr)
-        sys.stderr.flush()
-        
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all documents for parallel processing
-            future_to_doc = {executor.submit(analyze_single_document, doc_id): doc_id 
-                            for doc_id in document_ids}
-            
-            # Wait for all to complete
-            for future in as_completed(future_to_doc):
-                doc_id = future_to_doc[future]
-                try:
-                    result = future.result()
-                except Exception as e:
-                    print(f"❌ Future exception for {doc_id}: {e}", file=sys.stderr)
+        cursor.close()
+        conn.close()
         
         # Mark as completed
         custom_ai_progress[job_id]['completed'] = True
-        
-        print(f"\n{'='*60}", file=sys.stderr)
-        print(f"✅ JOB COMPLETE: {custom_ai_progress[job_id]['processed']}/{custom_ai_progress[job_id]['total']} documents", file=sys.stderr)
-        print(f"{'='*60}\n", file=sys.stderr)
-        sys.stderr.flush()
+        print(f"Custom AI analysis job {job_id} completed: {custom_ai_progress[job_id]['processed']}/{custom_ai_progress[job_id]['total']}")
         
     except Exception as e:
-        print(f"\n{'='*60}", file=sys.stderr)
-        print(f"❌ FATAL ERROR in job {job_id}", file=sys.stderr)
-        print(f"Error: {e}", file=sys.stderr)
+        print(f"=== ERROR in custom AI processing thread ===")
+        print(f"Job ID: {job_id}")
+        print(f"Error: {e}")
         import traceback
-        traceback.print_exc(file=sys.stderr)
-        print(f"{'='*60}\n", file=sys.stderr)
-        sys.stderr.flush()
+        traceback.print_exc()
+        print(f"===========================================")
         custom_ai_progress[job_id]['completed'] = True
 
 
@@ -1228,23 +993,11 @@ def relativity_integration():
 def api_relativity_upload():
     """Upload and parse a Relativity .DAT file."""
     try:
-        print("=== Upload request received ===")
-        
         # Check if file was uploaded
-        try:
-            files = request.files
-            print(f"Files in request: {list(files.keys())}")
-        except Exception as e:
-            print(f"Error accessing request.files: {e}")
-            return jsonify({'success': False, 'error': f'Error processing upload: {str(e)}'})
-        
         if 'datFile' not in request.files:
-            print("No datFile in request")
             return jsonify({'success': False, 'error': 'No file uploaded'})
         
         file = request.files['datFile']
-        print(f"File received: {file.filename}")
-        
         if file.filename == '':
             return jsonify({'success': False, 'error': 'No file selected'})
         
@@ -1255,89 +1008,37 @@ def api_relativity_upload():
         dat_path = upload_dir / file.filename
         file.save(str(dat_path))
         
-        print(f"Saved DAT file to: {dat_path}")
-        
-        # Parse the DAT file and IMMEDIATELY ingest into database
+        # Parse the DAT file
         from integrations.relativity_loader import RelativityLoadFileParser
         
         parser = RelativityLoadFileParser(dat_path)
         documents = parser.parse()
         
-        # Get database connection
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        # Convert to JSON-serializable format
+        doc_list = []
+        for doc in documents[:100]:  # Limit to first 100 for preview
+            doc_list.append({
+                'doc_id': doc.doc_id,
+                'bates_number': doc.bates_number,
+                'custodian': doc.custodian,
+                'date_sent': doc.date_sent,
+                'subject': doc.subject,
+                'from_field': doc.from_field,
+                'to_field': doc.to_field,
+            })
         
-        ingested_count = 0
-        
-        # Find TEXT directory (should be sibling to DAT file)
-        text_dir = dat_path.parent / "TEXT"
-        
-        print(f"Looking for TEXT directory at: {text_dir}")
-        print(f"TEXT directory exists: {text_dir.exists()}")
-        
-        for doc in documents:
-            # Read text content if available
-            text_content = ""
-            if text_dir.exists():
-                text_path_value = doc.metadata.get('TEXT_PATH', '')
-                if text_path_value:
-                    # Extract just the filename from TEXT/FILENAME.txt
-                    text_filename = Path(text_path_value).name
-                    text_file = text_dir / text_filename
-                    if text_file.exists():
-                        with open(text_file, 'r', encoding='utf-8', errors='ignore') as f:
-                            text_content = f.read()
-                        print(f"Read text file: {text_file} ({len(text_content)} chars)")
-            
-            # Ingest into database
-            try:
-                cursor.execute("""
-                    INSERT INTO documents (
-                        document_id, source, subject, body_text,
-                        collected_at, indexed_at, metadata_json
-                    ) VALUES (
-                        %s, %s, %s, %s,
-                        %s, %s, %s
-                    ) ON CONFLICT (document_id) DO UPDATE SET
-                        subject = EXCLUDED.subject,
-                        body_text = EXCLUDED.body_text,
-                        metadata_json = EXCLUDED.metadata_json,
-                        indexed_at = EXCLUDED.indexed_at
-                """, (
-                    doc.doc_id,
-                    'relativity_import',
-                    doc.subject or '',
-                    text_content,
-                    datetime.now(),
-                    datetime.now(),
-                    json.dumps(doc.metadata)
-                ))
-                
-                # Commit each document immediately
-                conn.commit()
-                ingested_count += 1
-                
-            except Exception as e:
-                import traceback
-                print(f"❌ Error ingesting document {doc.doc_id}: {e}")
-                print(traceback.format_exc())
-                import sys
-                sys.stdout.flush()
-                # Rollback this failed transaction
-                conn.rollback()
-                continue
-        
-        cursor.close()
-        conn.close()
-        
-        print(f"✅ Ingested {ingested_count} documents into database")
+        # Store parsed documents in session/temp storage
+        import json
+        parsed_file = upload_dir / f"{file.filename}.parsed.json"
+        with open(parsed_file, 'w') as f:
+            json.dump([doc.metadata for doc in documents], f)
         
         return jsonify({
             'success': True,
             'filename': file.filename,
             'total_documents': len(documents),
-            'ingested_count': ingested_count,
-            'message': f'✅ {ingested_count} documents uploaded and ready to search!'
+            'fields': parser.get_field_names(),
+            'preview': doc_list
         })
         
     except Exception as e:
@@ -1348,7 +1049,7 @@ def api_relativity_upload():
 
 @app.route('/api/relativity/analyze', methods=['POST'])
 def api_relativity_analyze():
-    """Run AI analysis AND ingest documents into database."""
+    """Run AI analysis on parsed documents."""
     try:
         data = request.get_json()
         filename = data.get('filename')
@@ -1373,123 +1074,11 @@ def api_relativity_analyze():
         parser = RelativityLoadFileParser(dat_path)
         documents = parser.parse()
         
-        # Get database connection
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        ingested_count = 0
+        # Run AI analysis
         analyzed_docs = []
-        
-        # Find TEXT directory (should be sibling to DAT file)
-        text_dir = dat_path.parent / "TEXT"
-        
         for doc in documents:
-            # Run AI analysis
             analyzed_doc = simulate_ai_analysis(doc)
             analyzed_docs.append(analyzed_doc)
-            
-            # Read text content if available
-            text_content = ""
-            if text_dir.exists():
-                text_path_value = doc.metadata.get('TEXT_PATH', '')
-                if text_path_value:
-                    # Extract just the filename from TEXT/FILENAME.txt
-                    text_filename = Path(text_path_value).name
-                    text_file = text_dir / text_filename
-                    if text_file.exists():
-                        with open(text_file, 'r', encoding='utf-8', errors='ignore') as f:
-                            text_content = f.read()
-            
-            # Ingest into database
-            try:
-                cursor.execute("""
-                    INSERT INTO documents (
-                        document_id, source_id, tenant_id, source_type,
-                        subject, body, date_sent, custodian,
-                        from_address, to_address, cc_address,
-                        bates_number, file_type,
-                        metadata, ingestion_date
-                    ) VALUES (
-                        %s, %s, %s, %s,
-                        %s, %s, %s, %s,
-                        %s, %s, %s,
-                        %s, %s,
-                        %s, %s
-                    ) ON CONFLICT (document_id, tenant_id) DO UPDATE SET
-                        subject = EXCLUDED.subject,
-                        body = EXCLUDED.body,
-                        date_sent = EXCLUDED.date_sent,
-                        metadata = EXCLUDED.metadata
-                """, (
-                    doc.doc_id,
-                    doc.doc_id,
-                    'default',  # tenant_id
-                    'relativity_import',
-                    doc.subject or '',
-                    text_content,
-                    doc.date_sent or None,
-                    doc.custodian or '',
-                    doc.from_field or '',
-                    doc.to_field or '',
-                    '',  # cc_address
-                    doc.bates_number or '',
-                    'email',
-                    json.dumps(doc.metadata),
-                    datetime.now()
-                ))
-                
-                # Get the internal doc ID
-                cursor.execute("SELECT id FROM documents WHERE document_id = %s AND tenant_id = %s", 
-                              (doc.doc_id, 'default'))
-                result = cursor.fetchone()
-                if result:
-                    internal_doc_id = result[0]
-                    
-                    # Insert AI analysis results
-                    cursor.execute("""
-                        INSERT INTO ai_analysis (
-                            document_id, tenant_id,
-                            ai_responsive, ai_responsive_confidence,
-                            ai_privileged, ai_privilege_confidence,
-                            ai_classification, ai_hot_score,
-                            ai_topics, analysis_date
-                        ) VALUES (
-                            %s, %s,
-                            %s, %s,
-                            %s, %s,
-                            %s, %s,
-                            %s, %s
-                        ) ON CONFLICT (document_id, tenant_id) DO UPDATE SET
-                            ai_responsive = EXCLUDED.ai_responsive,
-                            ai_responsive_confidence = EXCLUDED.ai_responsive_confidence,
-                            ai_privileged = EXCLUDED.ai_privileged,
-                            ai_privilege_confidence = EXCLUDED.ai_privilege_confidence,
-                            ai_classification = EXCLUDED.ai_classification,
-                            ai_hot_score = EXCLUDED.ai_hot_score,
-                            ai_topics = EXCLUDED.ai_topics,
-                            analysis_date = EXCLUDED.analysis_date
-                    """, (
-                        internal_doc_id,
-                        'default',
-                        analyzed_doc.ai_responsive,
-                        analyzed_doc.ai_responsive_confidence,
-                        analyzed_doc.ai_privileged,
-                        analyzed_doc.ai_privilege_confidence,
-                        analyzed_doc.ai_classification,
-                        analyzed_doc.hot_score,
-                        analyzed_doc.ai_topics,
-                        datetime.now()
-                    ))
-                
-                ingested_count += 1
-                
-            except Exception as e:
-                print(f"Error ingesting document {doc.doc_id}: {e}")
-                continue
-        
-        conn.commit()
-        cursor.close()
-        conn.close()
         
         # Export enrichment file
         enrichment_file = upload_dir / f"{filename}.enrichment.csv"
@@ -1522,7 +1111,6 @@ def api_relativity_analyze():
             'success': True,
             'enrichment_file': f"{filename}.enrichment.csv",
             'total_documents': len(analyzed_docs),
-            'ingested_count': ingested_count,
             'statistics': {
                 'responsive_yes': responsive_yes,
                 'responsive_no': responsive_no,
@@ -1530,8 +1118,7 @@ def api_relativity_analyze():
                 'privileged_yes': privileged_yes,
                 'hot_documents': hot_docs,
             },
-            'sample_results': sample_results,
-            'message': f'✅ {ingested_count} documents ingested into database and ready to search!'
+            'sample_results': sample_results
         })
         
     except Exception as e:

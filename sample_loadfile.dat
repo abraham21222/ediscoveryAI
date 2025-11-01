@@ -1,0 +1,6 @@
+þDocIDþBatesNumberþCustodianþDateSentþSubjectþFromþToþFilePathþTextPath
+þEMAIL001þABC00001þjohn.doe@company.comþ2024-01-15þQuarterly Resultsþjohn.doe@company.comþcfo@company.comþ\NATIVES\EMAIL001.msgþ\TEXT\EMAIL001.txt
+þEMAIL002þABC00002þjane.smith@company.comþ2024-01-16þRe: Budget Discussionþjane.smith@company.comþjohn.doe@company.comþ\NATIVES\EMAIL002.emlþ\TEXT\EMAIL002.txt
+þEMAIL003þABC00003þlegal@company.comþ2024-01-17þConfidential: Attorney-Client Communicationþlegal@company.comþexternal.counsel@lawfirm.comþ\NATIVES\EMAIL003.msgþ\TEXT\EMAIL003.txt
+þDOC0001þABC00004þjohn.doe@company.comþ2024-01-20þContract Draft v3þN/AþN/Aþ\NATIVES\DOC0001.docxþ\TEXT\DOC0001.txt
+þEMAIL004þABC00005þhr@company.comþ2024-01-22þTeam Lunch Plansþhr@company.comþteam@company.comþ\NATIVES\EMAIL004.msgþ\TEXT\EMAIL004.txt

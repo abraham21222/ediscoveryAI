@@ -551,6 +551,7 @@
             cursor: pointer;
         }
     </style>
+    <script src="/static/delete_functions.js"></script>
 </head>
 <body>
     <div class="container">
@@ -560,13 +561,32 @@
                     <h1>🤖 AI E-Discovery Platform</h1>
                     <p class="subtitle">User-Driven Document Review • Powered by Claude AI & Semantic Search</p>
                 </div>
-                <div style="text-align: right;">
+                <div style="text-align: right; display: flex; gap: 15px; align-items: start;">
                     <div id="costTracker" style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); color: white; padding: 15px 20px; border-radius: 12px; min-width: 180px; cursor: pointer;" onclick="showCostBreakdown()">
                         <div style="font-size: 12px; opacity: 0.9; text-transform: uppercase; font-weight: 600;">Total Cost</div>
                         <div id="totalCost" style="font-size: 32px; font-weight: bold; margin: 5px 0;">$0.00</div>
                         <div style="font-size: 11px; opacity: 0.8;">💡 Click for breakdown</div>
                     </div>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <button id="deleteSelectedBtn" onclick="deleteSelectedDocuments()" style="background: #f59e0b; color: white; padding: 10px 20px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; display: none; transition: all 0.3s;" onmouseover="this.style.background='#d97706'" onmouseout="this.style.background='#f59e0b'">
+                            🗑️ Delete Selected (<span id="selectedCount">0</span>)
+                        </button>
+                        <button onclick="confirmDeleteAll()" style="background: #dc3545; color: white; padding: 10px 20px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; transition: all 0.3s;" onmouseover="this.style.background='#c82333'" onmouseout="this.style.background='#dc3545'">
+                            🗑️ Remove All Documents
+                        </button>
+                    </div>
                 </div>
+            </div>
+            
+            <!-- Navigation Bar -->
+            <div style="background: rgba(255, 255, 255, 0.95); padding: 12px 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <a href="/relativity" style="color: #667eea; text-decoration: none; font-weight: 600; padding: 8px 16px; border-radius: 8px; background: #eef1ff; display: inline-block; transition: all 0.3s;">
+                    ⚖️ Relativity Integration
+                </a>
+                <span style="color: #9ca3af; margin: 0 15px;">|</span>
+                <a href="/" style="color: #6b7280; text-decoration: none; font-weight: 600; padding: 8px 16px;">
+                    🏠 Search Dashboard
+                </a>
             </div>
             
             <div class="stats" id="stats">
@@ -636,6 +656,36 @@
                     <label>To Date</label>
                     <input type="date" id="searchDateTo" />
                 </div>
+                
+                <div class="filter-group">
+                    <label>📁 File Type</label>
+                    <select id="searchFileCategory">
+                        <option value="">All File Types</option>
+                        <option value="email">📧 Email</option>
+                        <option value="document">📄 Document</option>
+                        <option value="spreadsheet">📊 Spreadsheet</option>
+                        <option value="presentation">📽️ Presentation</option>
+                        <option value="image">🖼️ Image</option>
+                        <option value="video">🎥 Video</option>
+                        <option value="audio">🎵 Audio</option>
+                        <option value="archive">📦 Archive</option>
+                        <option value="database">💾 Database</option>
+                        <option value="code">💻 Code</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label>⚠️ Data Quality</label>
+                    <select id="searchDataQuality">
+                        <option value="">All Quality</option>
+                        <option value="valid">✓ Valid</option>
+                        <option value="corrupted">⚠️ Corrupted</option>
+                        <option value="encrypted">🔒 Encrypted</option>
+                        <option value="truncated">✂️ Truncated</option>
+                        <option value="invalid_format">❌ Invalid Format</option>
+                        <option value="suspicious">🦠 Suspicious</option>
+                    </select>
+                </div>
             </div>
             
             <button onclick="performSearch()" id="searchButton">
@@ -701,6 +751,41 @@
         </div>
     </div>
 
+    <!-- Results Summary Modal -->
+    <div class="modal" id="resultsSummaryModal" style="display: none;">
+        <div class="modal-content" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
+            <span class="modal-close" onclick="closeResultsSummary()">&times;</span>
+            <h2 style="margin-bottom: 20px;">🎉 Custom AI Analysis Complete!</h2>
+            
+            <div id="resultsSummaryContent"></div>
+            
+            <div style="margin-top: 30px; text-align: right;">
+                <button onclick="closeResultsSummary()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer;">
+                    Got It!
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Redacted Documents Modal -->
+    <div class="modal" id="redactedDocsModal" style="display: none;">
+        <div class="modal-content" style="max-width: 1200px; max-height: 90vh; overflow-y: auto;">
+            <span class="modal-close" onclick="closeRedactedDocs()">&times;</span>
+            <h2 style="margin-bottom: 20px;">🔒 Redacted Documents</h2>
+            
+            <div id="redactedDocsContent"></div>
+            
+            <div style="margin-top: 30px; display: flex; justify-content: space-between; align-items: center;">
+                <button onclick="exportRedactedDocs()" style="background: #10b981; color: white; padding: 12px 24px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer;">
+                    📥 Export All Redacted
+                </button>
+                <button onclick="closeRedactedDocs()" style="background: #667eea; color: white; padding: 12px 30px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer;">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Custom AI Analysis Modal -->
     <div class="modal" id="customAIModal">
         <div class="modal-content">
@@ -758,6 +843,48 @@
                         <button onclick="setCustomPrompt('contracts')" style="padding: 10px; font-size: 13px; background: #e7f0ff; color: #667eea;">
                             📄 Contract Terms
                         </button>
+                        <button onclick="setCustomPrompt('rank')" style="padding: 10px; font-size: 13px; background: #dcfce7; color: #10b981;">
+                            ⚡ Quick Relevance Rank
+                        </button>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 20px; background: #f0fdf4; padding: 15px; border-radius: 8px; border-left: 4px solid #10b981;">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" id="createTagsCheckbox" checked style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                        <div>
+                            <strong style="color: #333;">🏷️ Automatically create tags</strong>
+                            <div style="font-size: 13px; color: #666; margin-top: 4px;">
+                                AI will create user tags like "Attorney-Client Privilege", "Financial Fraud", "Needs Review" based on findings
+                            </div>
+                        </div>
+                    </label>
+                </div>
+                
+                <div style="margin-bottom: 20px; background: #fff8dc; padding: 15px; border-radius: 8px; border-left: 4px solid #dc3545;">
+                    <label style="display: flex; align-items: flex-start; cursor: pointer;">
+                        <input type="checkbox" id="redactionModeCheckbox" style="margin-right: 10px; margin-top: 3px; width: 18px; height: 18px; cursor: pointer;" onchange="toggleRedactionPrompt()">
+                        <div style="flex: 1;">
+                            <strong style="color: #333;">🔒 Redaction Mode</strong>
+                            <div style="font-size: 13px; color: #666; margin-top: 4px;">
+                                AI will identify and redact sensitive information, creating redacted versions of documents
+                            </div>
+                            <div style="font-size: 12px; color: #667eea; margin-top: 6px; background: #f0f9ff; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #667eea;">
+                                💡 <strong>Tip:</strong> When you check this box, the analysis prompt above will auto-fill. Just specify what to redact below!
+                            </div>
+                        </div>
+                    </label>
+                    
+                    <div id="redactionPromptSection" style="display: none; margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+                        <label style="display: block; font-weight: 600; margin-bottom: 8px; color: #333; font-size: 13px;">
+                            🎯 What should be redacted?
+                        </label>
+                        <textarea id="redactionPrompt" 
+                                  placeholder="Example: Redact all Social Security Numbers, credit card numbers, attorney names, and client identities. Replace with [REDACTED - SSN], [REDACTED - NAME], etc."
+                                  style="width: 100%; min-height: 80px; padding: 10px; border: 2px solid #dc3545; border-radius: 6px; font-size: 13px; font-family: inherit; line-height: 1.5;"></textarea>
+                        <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                            💡 Be specific! The AI will identify and redact matching content, showing you before/after versions.
+                        </div>
                     </div>
                 </div>
                 
@@ -766,7 +893,8 @@
                     <div style="background: rgba(255,255,255,0.5); height: 10px; border-radius: 5px; overflow: hidden; margin: 10px 0;">
                         <div id="customAIProgressBar" style="height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); width: 0%; transition: width 0.3s;"></div>
                     </div>
-                    <div id="customAIProgressText" style="font-size: 13px; color: #666;">Starting...</div>
+                    <div id="customAIProgressText" style="font-size: 13px; color: #666; margin-bottom: 5px;">Starting...</div>
+                    <div id="customAICurrentDoc" style="font-size: 12px; color: #888; font-style: italic;"></div>
                 </div>
                 
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
@@ -958,6 +1086,30 @@
         function closeCustomAIModal() {
             document.getElementById('customAIModal').style.display = 'none';
         }
+        
+        function toggleRedactionPrompt() {
+            const checkbox = document.getElementById('redactionModeCheckbox');
+            const section = document.getElementById('redactionPromptSection');
+            const mainPrompt = document.getElementById('customAIPrompt');
+            
+            if (checkbox.checked) {
+                section.style.display = 'block';
+                // Auto-fill main prompt for redaction-only mode
+                if (!mainPrompt.value || mainPrompt.value.trim() === '') {
+                    mainPrompt.value = 'Review these documents and identify sensitive information that needs redaction.';
+                    mainPrompt.style.background = '#f0f9ff';
+                    mainPrompt.style.borderLeft = '3px solid #667eea';
+                }
+            } else {
+                section.style.display = 'none';
+                // Clear auto-filled prompt if it's the default redaction one
+                if (mainPrompt.value === 'Review these documents and identify sensitive information that needs redaction.') {
+                    mainPrompt.value = '';
+                    mainPrompt.style.background = 'white';
+                    mainPrompt.style.borderLeft = 'none';
+                }
+            }
+        }
 
         const promptTemplates = {
             privilege: `Analyze this document for attorney-client privilege. Look for:
@@ -995,7 +1147,11 @@ Identify any compliance risks or violations.`,
 - Liability and indemnification
 - Non-compete or confidentiality provisions
 
-Extract and summarize all important contractual terms.`
+Extract and summarize all important contractual terms.`,
+            
+            rank: `Rate this document's potential relevance for legal review on a scale of 0-100.
+Consider: importance of content, key parties involved, legal significance, potential evidence value.
+Focus on: providing just a relevance score and brief 1-sentence reason.`
         };
 
         function setCustomPrompt(templateName) {
@@ -1004,13 +1160,30 @@ Extract and summarize all important contractual terms.`
 
         async function startCustomAIAnalysis() {
             const prompt = document.getElementById('customAIPrompt').value.trim();
+            const createTags = document.getElementById('createTagsCheckbox').checked;
+            const redactionMode = document.getElementById('redactionModeCheckbox').checked;
+            const redactionPrompt = document.getElementById('redactionPrompt').value.trim();
             
             if (!prompt) {
                 alert('⚠️ Please enter an analysis instruction.');
                 return;
             }
             
-            if (!confirm(`This will analyze ${currentDocuments.length} documents with your custom instruction.\n\nEstimated cost: $${(currentDocuments.length * 0.10).toFixed(2)}\n\nContinue?`)) {
+            if (redactionMode && !redactionPrompt) {
+                alert('⚠️ Please specify what should be redacted.');
+                return;
+            }
+            
+            let confirmMsg = `This will analyze ${currentDocuments.length} documents with your custom instruction.\n\nEstimated cost: $${(currentDocuments.length * 0.12).toFixed(2)}`;
+            if (createTags) {
+                confirmMsg += '\n\n🏷️ Tags will be automatically created based on findings.';
+            }
+            if (redactionMode) {
+                confirmMsg += '\n\n🔒 Redacted versions will be created based on your redaction instructions.';
+            }
+            confirmMsg += '\n\nContinue?';
+            
+            if (!confirm(confirmMsg)) {
                 return;
             }
             
@@ -1028,7 +1201,10 @@ Extract and summarize all important contractual terms.`
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         document_ids: documentIds,
-                        custom_prompt: prompt
+                        custom_prompt: prompt,
+                        create_tags: createTags,
+                        redaction_mode: redactionMode,
+                        redaction_prompt: redactionPrompt
                     })
                 });
                 
@@ -1060,25 +1236,391 @@ Extract and summarize all important contractual terms.`
                     if (data.success) {
                         const progress = (data.processed / totalDocs) * 100;
                         document.getElementById('customAIProgressBar').style.width = progress + '%';
-                        document.getElementById('customAIProgressText').textContent = 
-                            `Processed ${data.processed} of ${totalDocs} documents (${Math.round(progress)}%)`;
+                        
+                        // Show which document is being processed
+                        let statusText = `Processed ${data.processed} of ${totalDocs} documents (${Math.round(progress)}%)`;
+                        document.getElementById('customAIProgressText').textContent = statusText;
+                        
+                        // Show current document being analyzed
+                        const currentDocDiv = document.getElementById('customAICurrentDoc');
+                        if (data.current_subject && !data.completed) {
+                            currentDocDiv.textContent = `📄 Analyzing: ${data.current_subject.substring(0, 80)}${data.current_subject.length > 80 ? '...' : ''}`;
+                        } else if (data.completed) {
+                            currentDocDiv.textContent = '';
+                        } else {
+                            currentDocDiv.textContent = data.processed > 0 ? '⏳ Processing next document...' : '🚀 Starting analysis...';
+                        }
                         
                         if (data.completed) {
                             clearInterval(interval);
                             document.getElementById('customAIProgressText').textContent = 
                                 `✅ Complete! Analyzed ${totalDocs} documents.`;
+                            document.getElementById('customAICurrentDoc').textContent = 'All documents have been analyzed successfully!';
                             
                             setTimeout(() => {
+                                showResultsSummary(data.results);
                                 closeCustomAIModal();
+                                
+                                // Show redacted documents if redaction mode was enabled
+                                if (data.redaction_mode && data.redactions && data.redactions.length > 0) {
+                                    setTimeout(() => {
+                                        showRedactedDocuments(data.redactions);
+                                    }, 500);
+                                }
+                                
                                 performSearch(); // Refresh to show new results
-                                alert('🎉 Custom AI analysis complete! Results have been saved.');
-                            }, 2000);
+                            }, 1500);
                         }
                     }
                 } catch (error) {
                     console.error('Progress polling error:', error);
                 }
-            }, 2000); // Poll every 2 seconds
+            }, 500); // Poll every 500ms for more responsive updates
+        }
+
+        function showResultsSummary(results) {
+            if (!results || results.length === 0) {
+                return;
+            }
+            
+            // Calculate summary stats
+            const highRelevance = results.filter(r => r.relevance >= 70).length;
+            const mediumRelevance = results.filter(r => r.relevance >= 40 && r.relevance < 70).length;
+            const lowRelevance = results.filter(r => r.relevance < 40).length;
+            
+            const highPrivilege = results.filter(r => r.privilege_risk >= 70).length;
+            const mediumPrivilege = results.filter(r => r.privilege_risk >= 40 && r.privilege_risk < 70).length;
+            const lowPrivilege = results.filter(r => r.privilege_risk < 40).length;
+            
+            let html = `
+                <div style="background: #e7f0ff; padding: 20px; border-radius: 12px; margin-bottom: 25px;">
+                    <h3 style="margin-bottom: 15px;">📊 Relevance Summary</h3>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px;">
+                        <div style="background: white; padding: 15px; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 32px; font-weight: bold; color: #10b981;">${highRelevance}</div>
+                            <div style="font-size: 13px; color: #666; margin-top: 5px;">High Relevance (70+)</div>
+                        </div>
+                        <div style="background: white; padding: 15px; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 32px; font-weight: bold; color: #f59e0b;">${mediumRelevance}</div>
+                            <div style="font-size: 13px; color: #666; margin-top: 5px;">Medium Relevance (40-69)</div>
+                        </div>
+                        <div style="background: white; padding: 15px; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 32px; font-weight: bold; color: #94a3b8;">${lowRelevance}</div>
+                            <div style="font-size: 13px; color: #666; margin-top: 5px;">Low Relevance (<40)</div>
+                        </div>
+                    </div>
+                    
+                    <h3 style="margin-bottom: 15px;">⚖️ Attorney-Client Privilege Risk</h3>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                        <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #dc3545;">
+                            <div style="font-size: 32px; font-weight: bold; color: #dc3545;">${highPrivilege}</div>
+                            <div style="font-size: 13px; color: #666; margin-top: 5px;">HIGH Risk (70+)</div>
+                            <div style="font-size: 11px; color: #dc3545; margin-top: 5px; font-weight: 600;">⚠️ Likely Privileged</div>
+                        </div>
+                        <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #f59e0b;">
+                            <div style="font-size: 32px; font-weight: bold; color: #f59e0b;">${mediumPrivilege}</div>
+                            <div style="font-size: 13px; color: #666; margin-top: 5px;">MEDIUM Risk (40-69)</div>
+                            <div style="font-size: 11px; color: #f59e0b; margin-top: 5px; font-weight: 600;">⚠️ Review Required</div>
+                        </div>
+                        <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #10b981;">
+                            <div style="font-size: 32px; font-weight: bold; color: #10b981;">${lowPrivilege}</div>
+                            <div style="font-size: 13px; color: #666; margin-top: 5px;">LOW Risk (<40)</div>
+                            <div style="font-size: 11px; color: #10b981; margin-top: 5px; font-weight: 600;">✓ Likely Not Privileged</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h3 style="margin-bottom: 15px;">📄 Document Results</h3>
+            `;
+            
+            // Sort by relevance (high to low)
+            results.sort((a, b) => b.relevance - a.relevance);
+            
+            results.forEach(result => {
+                const relevanceColor = result.relevance >= 70 ? '#10b981' : 
+                                      result.relevance >= 40 ? '#f59e0b' : '#94a3b8';
+                
+                const classificationBadge = result.classification === 'relevant' ? 
+                    '<span style="background: #10b981; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; margin-left: 10px;">✓ RELEVANT</span>' :
+                    result.classification === 'not-relevant' ?
+                    '<span style="background: #94a3b8; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; margin-left: 10px;">✗ NOT RELEVANT</span>' :
+                    '<span style="background: #f59e0b; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; margin-left: 10px;">⚠ NEEDS REVIEW</span>';
+                
+                const privilegeColor = result.privilege_risk >= 70 ? '#dc3545' : 
+                                      result.privilege_risk >= 40 ? '#f59e0b' : '#10b981';
+                const privilegeLevel = result.privilege_risk >= 70 ? 'HIGH' : 
+                                      result.privilege_risk >= 40 ? 'MEDIUM' : 'LOW';
+                
+                html += `
+                    <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin-bottom: 12px; cursor: pointer; transition: all 0.2s;" 
+                         onclick="openDocument('${result.document_id}')"
+                         onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'; this.style.borderColor='#667eea';"
+                         onmouseout="this.style.boxShadow='none'; this.style.borderColor='#e5e7eb';">
+                        <div style="display: flex; align-items: flex-start; gap: 15px;">
+                            <div style="flex-shrink: 0; display: flex; gap: 10px;">
+                                <div style="text-align: center;">
+                                    <div style="font-size: 24px; font-weight: bold; color: ${relevanceColor};">
+                                        ${result.relevance}
+                                    </div>
+                                    <div style="font-size: 10px; color: #666;">Relevance</div>
+                                </div>
+                                <div style="text-align: center; border-left: 2px solid #e5e7eb; padding-left: 10px;">
+                                    <div style="font-size: 24px; font-weight: bold; color: ${privilegeColor};">
+                                        ${result.privilege_risk}
+                                    </div>
+                                    <div style="font-size: 10px; color: #666;">Privilege</div>
+                                </div>
+                            </div>
+                            <div style="flex-grow: 1;">
+                                <div style="font-weight: 600; margin-bottom: 5px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
+                                    <span>${result.subject || 'No Subject'}</span>
+                                    ${classificationBadge}
+                                    <span style="background: ${privilegeColor}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px;">
+                                        ⚖️ ${privilegeLevel} PRIVILEGE RISK
+                                    </span>
+                                </div>
+                                <div style="font-size: 13px; color: #666; line-height: 1.5;">
+                                    ${result.key_findings || 'Analysis completed'}
+                                </div>
+                                <div style="font-size: 12px; color: #667eea; margin-top: 8px;">
+                                    👁️ Click to view full document
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 20px; text-align: center; color: #666; font-size: 13px;">
+                    💡 The search results below have been updated with these AI insights!
+                </div>
+            `;
+            
+            document.getElementById('resultsSummaryContent').innerHTML = html;
+            document.getElementById('resultsSummaryModal').style.display = 'flex';
+        }
+        
+        function closeResultsSummary() {
+            document.getElementById('resultsSummaryModal').style.display = 'none';
+        }
+        
+        let currentRedactions = [];
+        let revealRedactions = false;
+        
+        function showRedactedDocuments(redactions) {
+            if (!redactions || redactions.length === 0) {
+                return;
+            }
+            
+            currentRedactions = redactions;
+            revealRedactions = false;
+            
+            let html = `
+                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #dc3545;">
+                    <strong>🔒 Redacted: ${redactions.length} document(s)</strong>
+                    <div style="font-size: 13px; color: #666; margin-top: 8px;">
+                        Redacted versions look like official redacted documents. Hover over black bars to see original text, or click "Reveal All" to toggle.
+                    </div>
+                </div>
+                
+                <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center;">
+                    <button id="toggleRedactionsBtn" onclick="toggleRevealRedactions()" style="background: #667eea; color: white; padding: 10px 20px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer;">
+                        👁️ Reveal All Redactions
+                    </button>
+                    <span style="font-size: 13px; color: #666;">
+                        💡 Hover over any <span style="background: black; color: black; padding: 2px 6px;">████</span> redacted area to see original text
+                    </span>
+                </div>
+            `;
+            
+            redactions.forEach((redaction, index) => {
+                const redactedSubjectHtml = createVisuallyRedactedText(redaction.original_subject, redaction.redacted_subject, index, 'subject');
+                const redactedBodyHtml = createVisuallyRedactedText(redaction.original_body, redaction.redacted_body, index, 'body');
+                
+                html += `
+                    <div style="background: white; border: 2px solid #000; border-radius: 4px; padding: 25px; margin-bottom: 25px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <div style="border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <h3 style="color: #000; margin: 0; font-family: 'Courier New', monospace;">
+                                    REDACTED DOCUMENT ${String(index + 1).padStart(3, '0')}
+                                </h3>
+                                <div style="background: #dc3545; color: white; padding: 4px 12px; border-radius: 3px; font-size: 11px; font-weight: 700; letter-spacing: 1px;">
+                                    CONFIDENTIAL
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="background: #fffef0; padding: 15px; border: 1px solid #000; margin-bottom: 20px; font-family: 'Courier New', monospace; font-size: 12px;">
+                            <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+                                <strong>CLASSIFICATION:</strong>
+                                <span>REDACTED PER PRIVACY ACT</span>
+                            </div>
+                            <div style="display: flex; gap: 10px;">
+                                <strong>REDACTED ITEMS:</strong>
+                                <span style="color: #666;">${escapeHtml(redaction.redaction_summary)}</span>
+                            </div>
+                        </div>
+                        
+                        <div style="background: white; border: 2px solid #000; padding: 20px; font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.8;">
+                            <div style="margin-bottom: 25px;">
+                                <div style="font-weight: bold; margin-bottom: 10px; text-decoration: underline;">SUBJECT:</div>
+                                <div id="doc-${index}-subject" style="padding: 10px; background: #fafafa; border-left: 3px solid #000;">
+                                    ${redactedSubjectHtml}
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <div style="font-weight: bold; margin-bottom: 10px; text-decoration: underline;">CONTENT:</div>
+                                <div id="doc-${index}-body" style="padding: 15px; background: #fafafa; border-left: 3px solid #000; max-height: 500px; overflow-y: auto;">
+                                    ${redactedBodyHtml}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #ccc; font-size: 11px; color: #666; font-family: 'Courier New', monospace;">
+                            DOCUMENT REDACTED: ${new Date().toLocaleString()} | REVIEW REQUIRED BEFORE DISTRIBUTION
+                        </div>
+                    </div>
+                `;
+            });
+            
+            document.getElementById('redactedDocsContent').innerHTML = html;
+            document.getElementById('redactedDocsModal').style.display = 'flex';
+        }
+        
+        function createVisuallyRedactedText(originalText, redactedText, docIndex, section) {
+            // Find all [REDACTED - XXX] patterns and replace with visual black bars
+            const redactionRegex = /\[REDACTED - ([^\]]+)\]/g;
+            
+            let result = escapeHtml(redactedText);
+            let matchIndex = 0;
+            
+            result = result.replace(redactionRegex, (match, redactionType) => {
+                matchIndex++;
+                const redactionId = `redact-${docIndex}-${section}-${matchIndex}`;
+                
+                // Extract the original text that was redacted
+                // This is a simplified approach - in production, you'd track exact positions
+                const redactionLength = Math.max(50, redactionType.length * 8);
+                const blackBar = '█'.repeat(Math.ceil(redactionLength / 10));
+                
+                return `<span 
+                    id="${redactionId}" 
+                    class="redaction-bar" 
+                    data-original="${escapeHtml(match)}"
+                    title="Hover to reveal | Click 'Reveal All' button"
+                    style="background: #000; color: #000; padding: 2px 6px; border-radius: 2px; cursor: help; position: relative; display: inline-block; user-select: none;"
+                    onmouseenter="showRedactionTooltip(event, '${escapeHtml(redactionType)}')"
+                    onmouseleave="hideRedactionTooltip()"
+                >${blackBar}</span>`;
+            });
+            
+            return result;
+        }
+        
+        function showRedactionTooltip(event, redactionType) {
+            if (revealRedactions) return;
+            
+            const tooltip = document.getElementById('redactionTooltip') || createTooltip();
+            tooltip.innerHTML = `
+                <div style="font-weight: 600; margin-bottom: 5px; color: #dc3545;">🔒 REDACTED</div>
+                <div style="font-size: 12px; color: #666;">Type: ${redactionType}</div>
+                <div style="font-size: 11px; color: #999; margin-top: 5px;">Click "Reveal All" to see original text</div>
+            `;
+            tooltip.style.display = 'block';
+            tooltip.style.left = event.pageX + 10 + 'px';
+            tooltip.style.top = event.pageY + 10 + 'px';
+        }
+        
+        function hideRedactionTooltip() {
+            const tooltip = document.getElementById('redactionTooltip');
+            if (tooltip) {
+                tooltip.style.display = 'none';
+            }
+        }
+        
+        function createTooltip() {
+            const tooltip = document.createElement('div');
+            tooltip.id = 'redactionTooltip';
+            tooltip.style.cssText = `
+                position: absolute;
+                background: white;
+                border: 2px solid #dc3545;
+                border-radius: 6px;
+                padding: 10px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                z-index: 10000;
+                max-width: 250px;
+                display: none;
+                font-family: 'Courier New', monospace;
+                font-size: 13px;
+            `;
+            document.body.appendChild(tooltip);
+            return tooltip;
+        }
+        
+        function toggleRevealRedactions() {
+            revealRedactions = !revealRedactions;
+            const btn = document.getElementById('toggleRedactionsBtn');
+            const bars = document.querySelectorAll('.redaction-bar');
+            
+            if (revealRedactions) {
+                btn.textContent = '🔒 Hide Redactions';
+                btn.style.background = '#dc3545';
+                bars.forEach(bar => {
+                    bar.style.background = '#fff3cd';
+                    bar.style.color = '#000';
+                    bar.style.border = '2px solid #ffc107';
+                    bar.style.fontFamily = 'inherit';
+                    bar.textContent = ' ' + bar.getAttribute('data-original') + ' ';
+                });
+            } else {
+                btn.textContent = '👁️ Reveal All Redactions';
+                btn.style.background = '#667eea';
+                bars.forEach(bar => {
+                    bar.style.background = '#000';
+                    bar.style.color = '#000';
+                    bar.style.border = 'none';
+                    bar.style.fontFamily = "'Courier New', monospace";
+                    const blackBar = '█'.repeat(Math.ceil(50 / 10));
+                    bar.textContent = blackBar;
+                });
+            }
+        }
+        
+        function closeRedactedDocs() {
+            document.getElementById('redactedDocsModal').style.display = 'none';
+            hideRedactionTooltip();
+        }
+        
+        function exportRedactedDocs() {
+            // Create a simple text export of redacted documents
+            let exportText = "REDACTED DOCUMENTS\n";
+            exportText += "=".repeat(80) + "\n";
+            exportText += "Generated: " + new Date().toLocaleString() + "\n";
+            exportText += "=".repeat(80) + "\n\n";
+            
+            currentRedactions.forEach((redaction, index) => {
+                exportText += `DOCUMENT ${String(index + 1).padStart(3, '0')}\n`;
+                exportText += "-".repeat(80) + "\n";
+                exportText += `SUBJECT: ${redaction.redacted_subject}\n\n`;
+                exportText += `CONTENT:\n${redaction.redacted_body}\n`;
+                exportText += "\n" + "=".repeat(80) + "\n\n";
+            });
+            
+            // Download as text file
+            const blob = new Blob([exportText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `redacted_documents_${Date.now()}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            alert('✅ Redacted documents exported successfully!');
         }
 
         async function loadAvailableTags() {
@@ -1152,6 +1694,8 @@ Extract and summarize all important contractual terms.`
             const reviewStatus = document.getElementById('searchReviewStatus').value;
             const dateFrom = document.getElementById('searchDateFrom').value;
             const dateTo = document.getElementById('searchDateTo').value;
+            const fileCategory = document.getElementById('searchFileCategory').value;  // NEW
+            const dataQuality = document.getElementById('searchDataQuality').value;    // NEW
             
             const searchButton = document.getElementById('searchButton');
             const resultsContainer = document.getElementById('resultsContainer');
@@ -1171,6 +1715,8 @@ Extract and summarize all important contractual terms.`
                         classification,
                         date_from: dateFrom,
                         date_to: dateTo,
+                        file_category: fileCategory,  // NEW
+                        data_quality: dataQuality,    // NEW
                         limit: 100
                     })
                 });
@@ -1266,7 +1812,14 @@ Extract and summarize all important contractual terms.`
                 
                 return `
                     <div class="document-card ${cardClass}" onclick="viewDocument('${doc.document_id}')">
-                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div style="display: flex; justify-content: space-between; align-items: start; gap: 15px;">
+                            <div style="padding-top: 3px;" onclick="event.stopPropagation();">
+                                <input type="checkbox" 
+                                       class="doc-checkbox" 
+                                       data-doc-id="${doc.document_id}" 
+                                       onchange="updateSelectionCount()"
+                                       style="width: 20px; height: 20px; cursor: pointer; accent-color: #667eea;">
+                            </div>
                             <div style="flex: 1;">
                                 <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">
                                     ${escapeHtml(doc.subject || 'No Subject')}
@@ -1314,6 +1867,10 @@ Extract and summarize all important contractual terms.`
                     </div>
                 `;
             }).join('');
+
+            if (typeof updateSelectionCount === 'function') {
+                updateSelectionCount();
+            }
         }
 
         function showTagMenu(documentId, event) {
@@ -1372,6 +1929,64 @@ Extract and summarize all important contractual terms.`
                 if (data.success) {
                     const doc = data.document;
                     const hasAI = doc.ai_analyzed_at !== null;
+                    const bodyText = doc.body_text || doc.body || doc.original_text || '';
+                    const hasRedaction = doc.redacted_body && doc.redacted_body.trim().length > 0;
+                    const redactionTimestamp = doc.redaction_created_at ? new Date(doc.redaction_created_at).toLocaleString() : null;
+                    const docKey = (doc.document_id || 'doc').replace(/[^a-zA-Z0-9_-]/g, '');
+                    let redactionSection = '';
+
+                    if (hasRedaction) {
+                        const redactedSubjectHtml = createVisuallyRedactedText(
+                            doc.subject || '',
+                            doc.redacted_subject || doc.subject || '',
+                            `${docKey}-modal`,
+                            'subject'
+                        );
+
+                        const redactedBodyHtml = createVisuallyRedactedText(
+                            bodyText,
+                            doc.redacted_body,
+                            `${docKey}-modal`,
+                            'body'
+                        );
+
+                        redactionSection = `
+                            <div style="margin-top: 25px; background: #fff8dc; padding: 20px; border-radius: 12px; border-left: 4px solid #dc3545;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                                    <h3 style="margin: 0; color: #dc3545;">🔒 Redacted View</h3>
+                                    <div style="display: flex; gap: 10px; align-items: center;">
+                                        <button onclick="toggleRevealRedactions()" style="background: #667eea; color: white; padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer;">
+                                            👁️ Toggle Redactions
+                                        </button>
+                                        ${redactionTimestamp ? `<span style="font-size: 12px; color: #666;">Last updated: ${redactionTimestamp}</span>` : ''}
+                                    </div>
+                                </div>
+                                <p style="font-size: 13px; color: #666; margin-top: 12px;">
+                                    Hover over any <span style="background: black; color: black; padding: 2px 6px; border-radius: 2px;">█████</span> bar to preview the hidden text, or click the toggle to reveal/hide all redactions at once.
+                                </p>
+                                ${doc.redaction_summary ? `
+                                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #dc3545; margin-bottom: 20px;">
+                                        <strong>Summary of Redactions:</strong>
+                                        <div style="margin-top: 8px; font-size: 13px; color: #444;">${escapeHtml(doc.redaction_summary)}</div>
+                                    </div>
+                                ` : ''}
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+                                    <div style="background: rgba(255,255,255,0.9); padding: 15px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.05);">
+                                        <div style="font-size: 12px; font-weight: 600; color: #666; margin-bottom: 8px;">📝 Original Subject</div>
+                                        <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; font-size: 13px;">${escapeHtml(doc.subject || '')}</div>
+                                        <div style="font-size: 12px; font-weight: 600; color: #666; margin: 15px 0 8px;">📄 Original Body</div>
+                                        <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; font-size: 13px; white-space: pre-wrap; max-height: 260px; overflow-y: auto;">${escapeHtml(bodyText)}</div>
+                                    </div>
+                                    <div style="background: rgba(255,255,255,0.95); padding: 15px; border-radius: 10px; border: 1px solid rgba(220,53,69,0.2);">
+                                        <div style="font-size: 12px; font-weight: 600; color: #dc3545; margin-bottom: 8px;">🔒 Redacted Subject</div>
+                                        <div style="background: #fff0f0; padding: 12px; border-radius: 6px; font-size: 13px;">${redactedSubjectHtml}</div>
+                                        <div style="font-size: 12px; font-weight: 600; color: #dc3545; margin: 15px 0 8px;">🔒 Redacted Body</div>
+                                        <div style="background: #fff0f0; padding: 12px; border-radius: 6px; font-size: 13px; white-space: pre-wrap; max-height: 260px; overflow-y: auto;">${redactedBodyHtml}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
                     
                     // Get current user review
                     const reviewResponse = await fetch(`/api/document/${documentId}/review`);
@@ -1382,6 +1997,7 @@ Extract and summarize all important contractual terms.`
                     const tagsResponse = await fetch(`/api/document/${documentId}/tags`);
                     const tagsData = await tagsResponse.json();
                     const tags = tagsData.tags || [];
+                    console.log('📌 Tags for document:', documentId, tags);
                     
                     modalContent.innerHTML = `
                         <h2>${escapeHtml(doc.subject || 'No Subject')}</h2>
@@ -1391,6 +2007,8 @@ Extract and summarize all important contractual terms.`
                             <strong>Date:</strong> ${formatDate(doc.collected_at)}<br>
                             <strong>Source:</strong> ${escapeHtml(doc.source)}
                         </div>
+                        
+                        ${redactionSection}
                         
                         ${hasAI ? `
                             <div style="background: #f8f9fa; padding: 20px; border-radius: 12px; margin: 20px 0;">
@@ -1428,6 +2046,23 @@ Extract and summarize all important contractual terms.`
                             </div>
                         ` : '<div style="background: #f8f9fa; padding: 20px; border-radius: 12px; margin: 20px 0;"><p>⏳ AI analysis pending...</p></div>'}
                         
+                        ${review.review_notes && review.review_notes.includes('Custom Analysis:') ? `
+                            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 12px; margin: 20px 0; color: white;">
+                                <h3 style="color: white; margin-bottom: 15px;">🎯 Custom AI Analysis Results</h3>
+                                <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; border-left: 4px solid white;">
+                                    <pre style="white-space: pre-wrap; font-family: inherit; margin: 0; line-height: 1.6;">${escapeHtml(review.review_notes)}</pre>
+                                </div>
+                                ${tags.length > 0 ? `
+                                    <div style="margin-top: 15px;">
+                                        <strong style="display: block; margin-bottom: 10px;">🏷️ Auto-Generated Tags:</strong>
+                                        <div>
+                                            ${tags.map(t => `<span style="background: white; color: #667eea; padding: 6px 12px; border-radius: 6px; display: inline-block; margin: 4px; font-weight: 600;">${escapeHtml(t.tag_name)}</span>`).join('')}
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        ` : ''}
+                        
                         <div class="review-panel">
                             <h3>Your Review</h3>
                             
@@ -1451,13 +2086,13 @@ Extract and summarize all important contractual terms.`
                             </div>
                             
                             <div class="review-section">
-                                <label>Your Tags</label>
-                                <div style="margin-bottom: 10px;">
-                                    ${tags.map(t => `
-                                        <span class="tag removable" onclick="removeTag('${documentId}', '${t.tag_name}')">
-                                            ${escapeHtml(t.tag_name)}
+                                <label>Your Tags ${tags.length > 0 ? `(${tags.length})` : ''}</label>
+                                <div style="margin-bottom: 10px; min-height: 30px;">
+                                    ${tags.length > 0 ? tags.map(t => `
+                                        <span class="tag removable" onclick="removeTag('${documentId}', '${escapeHtml(t.tag_name)}')">
+                                            🏷️ ${escapeHtml(t.tag_name)} <span style="color: #f5576c; margin-left: 5px;">×</span>
                                         </span>
-                                    `).join('')}
+                                    `).join('') : '<span style="color: #999; font-size: 13px;">No tags yet. Add tags to organize this document.</span>'}
                                 </div>
                                 <div class="tag-input">
                                     <input type="text" id="newTagInput" placeholder="Add a tag..." 
@@ -1486,7 +2121,7 @@ Extract and summarize all important contractual terms.`
                         <div style="margin-top: 20px;">
                             <h3>📄 Document Content</h3>
                             <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; white-space: pre-wrap; line-height: 1.6; max-height: 400px; overflow-y: auto; margin-top: 10px; border: 1px solid #e1e8ed;">
-                                ${escapeHtml(doc.body_text || 'No body text')}
+                                ${escapeHtml(bodyText || 'No body text')}
                             </div>
                         </div>
                     `;

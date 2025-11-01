@@ -80,3 +80,6 @@ Thumbs.db
 # Data and objects (evidence files)
 _objects/
 data/
+
+# Uploads (user-uploaded DAT files)
+uploads/

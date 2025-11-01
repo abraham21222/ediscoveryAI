@@ -21,6 +21,13 @@ class Attachment:
     size_bytes: int
     payload: bytes = field(repr=False)
     checksum_sha256: Optional[str] = None
+    # File analysis fields
+    file_category: Optional[str] = None  # document, image, video, etc.
+    data_quality: Optional[str] = None  # valid, corrupted, encrypted, etc.
+    quality_details: Optional[str] = None
+    md5_hash: Optional[str] = None
+    detected_mime: Optional[str] = None  # MIME from magic bytes
+    is_processable: bool = True
 
 
 @dataclass
@@ -64,6 +71,12 @@ class EvidenceDocument:
                     "content_type": attachment.content_type,
                     "size_bytes": attachment.size_bytes,
                     "checksum_sha256": attachment.checksum_sha256,
+                    "file_category": attachment.file_category,
+                    "data_quality": attachment.data_quality,
+                    "quality_details": attachment.quality_details,
+                    "md5_hash": attachment.md5_hash,
+                    "detected_mime": attachment.detected_mime,
+                    "is_processable": attachment.is_processable,
                 }
                 for attachment in self.attachments
             ],
